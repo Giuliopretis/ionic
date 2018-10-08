@@ -122,63 +122,41 @@ export class Select implements ComponentInterface {
   @Watch('value')
   valueChanged() {
     // this select value just changed
+    const value = this.value;
+    const texts: string[] = [];
+
+    let hasChecked = false;
+    const values = Array.isArray(value) ? value : [value];
+
     // double check the select option with this value is checked
-    if (this.value === undefined) {
-      // set to undefined
-      // ensure all that are checked become unchecked
-      this.childOpts.filter(o => o.selected).forEach(selectOption => {
+    this.childOpts.forEach(selectOption => {
+      const selected = values.includes(selectOption.value);
+      if (selected && (this.multiple || !hasChecked)) {
+        selectOption.selected = true;
+        texts.push(selectOption.textContent || '');
+        hasChecked = true;
+      } else {
         selectOption.selected = false;
-      });
-      this.text = '';
+      }
+    });
 
-    } else {
-      let hasChecked = false;
-      const texts: string[] = [];
-
-      this.childOpts.forEach(selectOption => {
-        if ((Array.isArray(this.value) && this.value.includes(selectOption.value)) || (selectOption.value === this.value)) {
-          if (!selectOption.selected && (this.multiple || !hasChecked)) {
-            // correct value for this select option
-            // but this select option isn't checked yet
-            // and we haven't found a checked yet
-            // so CHECK IT!
-            selectOption.selected = true;
-
-          } else if (!this.multiple && hasChecked && selectOption.selected) {
-            // somehow we've got multiple select options
-            // with the same value, but only one can be checked
-            selectOption.selected = false;
-          }
-
-          // remember we've got a checked select option button now
-          hasChecked = true;
-
-        } else if (selectOption.selected) {
-          // this select option doesn't have the correct value
-          // and it's also checked, so let's uncheck it
-          selectOption.selected = false;
-        }
-
-        if (selectOption.selected) {
-          texts.push(selectOption.textContent || '');
-        }
-      });
-
-      this.text = texts.join(', ');
-    }
-
-    // emit the new value
+    this.text = texts.join(', ');
     this.ionChange.emit({
-      value: this.value,
-      text: this.text
+      text: this.text,
+      value,
     });
     this.emitStyle();
   }
 
   @Listen('ionSelectOptionDidLoad')
+  @Listen('ionSelectOptionDidUnload')
   optLoad(ev: CustomEvent) {
     const selectOption = ev.target as HTMLIonSelectOptionElement;
     this.childOpts = Array.from(this.el.querySelectorAll('ion-select-option'));
+
+    if (this.multiple) {
+      this.value = this.childOpts.filter(o => o.selected).map(o => o.value);
+    }
 
     if (this.value != null && (Array.isArray(this.value) && this.value.includes(selectOption.value)) || (selectOption.value === this.value)) {
       // this select has a value and this
@@ -203,14 +181,6 @@ export class Select implements ComponentInterface {
     }
   }
 
-  @Listen('ionSelectOptionDidUnload')
-  optUnload(ev: CustomEvent) {
-    const index = this.childOpts.indexOf(ev.target as HTMLIonSelectOptionElement);
-    if (index > -1) {
-      this.childOpts.splice(index, 1);
-    }
-  }
-
   @Listen('ionSelect')
   onSelect(ev: CustomEvent) {
     // ionSelect only come from the checked select option
@@ -230,7 +200,6 @@ export class Select implements ComponentInterface {
   }
 
   componentDidLoad() {
-    this.ionStyle = deferEvent(this.ionStyle);
 
     const label = this.getLabel();
     if (label) {
@@ -307,18 +276,16 @@ export class Select implements ComponentInterface {
         subHeader: interfaceOptions.subHeader,
         message: interfaceOptions.message,
         value: this.value,
-        options: this.childOpts.map(o => {
-          return {
-            text: o.textContent,
-            value: o.value,
-            checked: o.selected,
-            disabled: o.disabled,
-            handler: () => {
-              this.value = o.value;
-              this.close();
-            }
-          } as SelectPopoverOption;
-        })
+        options: this.childOpts.map(o => ({
+          text: o.textContent,
+          value: o.value,
+          checked: o.selected,
+          disabled: o.disabled,
+          handler: () => {
+            this.value = o.value;
+            this.close();
+          }
+        }))
       }
     };
 
@@ -476,16 +443,14 @@ export class Select implements ComponentInterface {
       addPlaceholderClass = true;
     }
 
-    const selectTextClasses: CssClassMap = {
-      'select-text': true,
-      'select-placeholder': addPlaceholderClass
-    };
-
     return [
       <div
         role="textbox"
         aria-multiline="false"
-        class={selectTextClasses}
+        class={{
+          'select-text': true,
+          'select-placeholder': addPlaceholderClass
+        }}
       >
         {selectText}
       </div>,
